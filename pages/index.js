@@ -4,8 +4,8 @@ import { createClient } from "@supabase/supabase-js";
 
 // 初始化Supabase（非空断言确保类型正确）
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
 export default function Home() {
