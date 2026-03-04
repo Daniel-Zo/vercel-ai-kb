@@ -11,12 +11,12 @@
   "dependencies": {
     "@pinecone-database/pinecone": "^2.2.2",
     "@supabase/supabase-js": "^2.38.4",
-    "next": "14.2.15", // 锁定稳定版
+    "next": "14.2.15",
     "openai": "^4.24.7",
-    "react": "18.2.0", // 锁定Next.js要求的版本
-    "react-dom": "18.2.0" // 和React版本保持一致
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
   },
   "engines": {
-    "node": ">=18.0.0" // 适配Vercel的Node环境
+    "node": ">=18.0.0"
   }
 }
