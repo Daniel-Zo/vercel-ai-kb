@@ -1,11 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  output: 'standalone', // 适配Vercel的Serverless环境
   experimental: {
-    appDir: true, // 启用App Router
-  },
-  // 解决Vercel部署的静态资源路径问题
-  output: 'standalone',
-}
+    // 禁用所有实验性特性，避免冲突
+    turbo: false
+  }
+};
 
-module.exports = nextConfig
+module.exports = nextConfig;
