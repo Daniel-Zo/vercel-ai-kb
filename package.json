@@ -17,6 +17,11 @@
     "react-dom": "18.2.0",
     "@swc/helpers": "^0.5.1"
   },
+  "devDependencies": {
+    "typescript": "^5.3.3", 
+    "@types/react": "^18.2.48", 
+    "@types/node": "^20.11.5"  
+  },
   "engines": {
     "node": ">=18.0.0"
   }
