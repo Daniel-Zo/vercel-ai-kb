@@ -20,7 +20,7 @@ const supabase = createClient(
 const pinecone = new Pinecone({
   apiKey: process.env.PINECONE_API_KEY,
 });
-const index = pinecone.Index(process.env.PINECONE_INDEX_NAME!);
+const index = pinecone.Index(process.env.PINECONE_INDEX_NAME);
 
 export default async function handler(req, res) {
   // 仅允许POST请求
