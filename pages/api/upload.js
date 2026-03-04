@@ -13,12 +13,12 @@ export const config = {
 
 // 初始化客户端
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
 const pinecone = new Pinecone({
-  apiKey: process.env.PINECONE_API_KEY!,
+  apiKey: process.env.PINECONE_API_KEY,
 });
 const index = pinecone.Index(process.env.PINECONE_INDEX_NAME!);
 
