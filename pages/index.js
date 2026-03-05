@@ -8,6 +8,26 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+// 核心修复：兼容处理标签格式（数组/字符串/null都能正常显示）
+const formatTags = (tags) => {
+  // 情况1：是数组 → 直接join
+  if (Array.isArray(tags)) {
+    return tags.join(", ");
+  }
+  // 情况2：是Supabase数组格式的字符串（如"{其他}"）→ 解析后join
+  else if (typeof tags === "string" && tags.startsWith("{") && tags.endsWith("}")) {
+    return tags.slice(1, -1).split(",").map(tag => tag.trim()).join(", ");
+  }
+  // 情况3：是普通字符串 → 直接返回
+  else if (typeof tags === "string") {
+    return tags;
+  }
+  // 情况4：null/undefined → 返回"未分类"
+  else {
+    return "未分类";
+  }
+};
+
 export default function Home() {
   // 状态管理
   const [file, setFile] = useState(null);
@@ -51,7 +71,8 @@ export default function Home() {
 
       const data = await response.json();
       if (data.success) {
-        alert(`上传成功！AI自动标签：${data.auto_tags.join(", ")}`);
+        // 修复1：使用formatTags处理auto_tags
+        alert(`上传成功！AI自动标签：${formatTags(data.auto_tags)}`);
         loadFiles(); // 刷新文件列表
       } else {
         alert(`上传失败：${data.error || "未知错误"}`);
@@ -100,7 +121,7 @@ export default function Home() {
     loadFiles();
   }, []);
 
-  // 页面UI（和原逻辑一致，确保功能不变）
+  // 页面UI（修复2：使用formatTags处理文件列表的tags）
   return (
     <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "20px" }}>
       <h1 style={{ fontSize: "28px", textAlign: "center", color: "#2563eb", margin: "20px 0" }}>
@@ -145,7 +166,8 @@ export default function Home() {
             >
               <h3 style={{ fontSize: "18px", marginBottom: "8px" }}>{f.file_name}</h3>
               <p style={{ color: "#64748b", marginBottom: "12px" }}>
-                当前标签：{f.tags?.join(", ") || "未分类"}
+                {/* 修复2：使用formatTags处理文件的tags */}
+                当前标签：{formatTags(f.tags)}
               </p>
               <div style={{ marginBottom: "12px" }}>
                 <label style={{ display: "block", marginBottom: "8px" }}>调整分类标签：</label>
