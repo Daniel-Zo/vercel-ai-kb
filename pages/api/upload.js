@@ -112,13 +112,31 @@ export default async function handler(req, res) {
     const autoTags = await aiClassifyText(text);
     const embedding = await getTextEmbedding(text);
 
-    // 写入Supabase
+    // // 写入Supabase
+    // if (supabase) {
+    //   await supabase.from("files").insert({
+    //     file_name: fileName,
+    //     tags: autoTags.join(","),
+    //     text_content: text.slice(0, 1000)
+    //   }).catch(err => console.error("Supabase写入失败：", err));
+    // }
+    
+    // 写入Supabase（正确语法）
     if (supabase) {
-      await supabase.from("files").insert({
-        file_name: fileName,
-        tags: autoTags.join(","),
-        text_content: text.slice(0, 1000)
-      }).catch(err => console.error("Supabase写入失败：", err));
+      try {
+        const { error } = await supabase.from("files").insert({
+          file_name: fileName,
+          tags: autoTags.join(","),
+          text_content: text.slice(0, 1000)
+        });
+        // 单独判断error
+        if (error) {
+          console.error("Supabase写入失败：", error.message);
+        }
+      } catch (err) {
+        // 捕获网络等异常
+        console.error("Supabase请求异常：", err.message);
+      }
     }
 
     // 写入Pinecone
