@@ -63,12 +63,12 @@ export default async function handler(req, res) {
     const fileName = pdfFile.originalFilename || `file_${Date.now()}.pdf`;
     const defaultTags = ["其他"]; // 固定标签，无需AI
 
-    // 写入Supabase（彻底修复.catch()语法）
+    // 替换原Supabase写入代码段
     if (supabase) {
-      // 正确语法：无链式.catch()，单独判断error
+      // 正确语法：传入数组（适配text[]类型）
       const { error: supabaseError } = await supabase.from("files").insert({
         file_name: fileName,
-        tags: defaultTags.join(","), // 适配text类型
+        tags: defaultTags, // 直接传数组["其他"]，而非字符串"其他"
         text_content: "PDF文件已上传（未提取文本）"
       });
       if (supabaseError) {
