@@ -1,4 +1,4 @@
-// pages/api/upload.js - 最终稳定版
+// pages/api/upload.js - 终极版（完全跳过OpenAI无效调用）
 import { createClient } from "@supabase/supabase-js";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { OpenAI } from "openai";
@@ -10,8 +10,10 @@ import { IncomingForm } from "formidable";
 // 解决ES模块__dirname
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// 初始化客户端（带兜底）
+// 初始化客户端（仅当有有效密钥时才创建OpenAI实例）
 let supabase, pinecone, openai;
+const isOpenAIEnabled = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== "dummy-key";
+
 try {
   // Supabase初始化
   supabase = createClient(
@@ -19,14 +21,16 @@ try {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
   );
 
-  // OpenAI初始化（配额用尽时也不崩溃）
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY || "dummy-key", // 兜底密钥
-  });
+  // 仅当有有效OpenAI密钥时才初始化
+  if (isOpenAIEnabled) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
 
   // Pinecone初始化
   pinecone = new Pinecone({
-    apiKey: process.env.PINECONE_API_KEY || "dummy-key", // 兜底密钥
+    apiKey: process.env.PINECONE_API_KEY || "dummy-key",
   });
 } catch (err) {
   console.error("客户端初始化失败：", err);
@@ -40,7 +44,6 @@ export const config = {
 // 简易PDF提取（无依赖版兜底）
 async function extractPdfText(buffer) {
   try {
-    // 优先用pdf-parse，失败则返回固定文本
     const pdfParse = (await import("pdf-parse")).default;
     const data = await pdfParse(buffer);
     return data.text || "默认PDF文本";
@@ -50,10 +53,11 @@ async function extractPdfText(buffer) {
   }
 }
 
-// AI分类（OpenAI配额用尽时直接返回默认标签）
+// AI分类（完全跳过OpenAI无效调用）
 async function aiClassifyText(text) {
-  // 兜底逻辑：无OpenAI或配额用尽时返回["其他"]
-  if (!openai || process.env.OPENAI_API_KEY === "dummy-key") {
+  // 核心：直接判断是否启用OpenAI，不创建无效实例
+  if (!isOpenAIEnabled || !openai) {
+    console.log("OpenAI未启用，返回默认标签");
     return ["其他"];
   }
 
@@ -68,7 +72,7 @@ async function aiClassifyText(text) {
     });
     return res.choices[0].message.content.split(",").map(t => t.trim());
   } catch (err) {
-    // 捕获429配额错误，直接返回默认标签
+    // 仅捕获有效密钥的异常（如配额用尽）
     if (err.code === "insufficient_quota" || err.status === 429) {
       console.error("OpenAI配额用尽，使用默认标签：", err.message);
       return ["其他"];
@@ -78,9 +82,10 @@ async function aiClassifyText(text) {
   }
 }
 
-// 获取向量（OpenAI配额用尽时返回空向量）
+// 获取向量（完全跳过OpenAI无效调用）
 async function getTextEmbedding(text) {
-  if (!openai || process.env.OPENAI_API_KEY === "dummy-key") {
+  if (!isOpenAIEnabled || !openai) {
+    console.log("OpenAI未启用，返回空向量");
     return Array(1536).fill(0);
   }
 
@@ -143,10 +148,9 @@ export default async function handler(req, res) {
     const autoTags = await aiClassifyText(text);
     const embedding = await getTextEmbedding(text);
 
-    // 写入Supabase（彻底修复.catch()语法错误）
+    // 写入Supabase（彻底修复.catch()语法）
     if (supabase) {
       try {
-        // 正确语法：先执行insert，再判断error
         const { error: supabaseError } = await supabase.from("files").insert({
           file_name: fileName,
           tags: autoTags.join(","),
@@ -160,8 +164,8 @@ export default async function handler(req, res) {
       }
     }
 
-    // 写入Pinecone（兜底，失败不影响核心流程）
-    if (pinecone && process.env.PINECONE_INDEX_NAME) {
+    // 写入Pinecone（兜底）
+    if (pinecone && process.env.PINECONE_INDEX_NAME && process.env.PINECONE_API_KEY !== "dummy-key") {
       try {
         const index = pinecone.Index(process.env.PINECONE_INDEX_NAME);
         await index.upsert([{
@@ -174,16 +178,17 @@ export default async function handler(req, res) {
       }
     }
 
-    // 返回成功响应（无论OpenAI是否可用）
+    // 返回成功响应
     return res.status(200).json({
       success: true,
       auto_tags: autoTags,
       file_name: fileName,
-      message: autoTags[0] === "其他" ? "使用默认标签（OpenAI配额用尽）" : "AI分类成功"
+      message: isOpenAIEnabled 
+        ? (autoTags[0] === "其他" ? "AI分类失败，使用默认标签" : "AI分类成功")
+        : "OpenAI未启用，使用默认标签"
     });
 
   } catch (error) {
-    // 捕获所有异常，返回标准JSON
     console.error("上传接口总异常：", error);
     return res.status(500).json({
       success: false,
