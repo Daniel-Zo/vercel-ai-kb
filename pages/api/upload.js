@@ -139,11 +139,18 @@ export default async function handler(req, res) {
       }
     }
 
-    // 写入Pinecone
+    // 写入Pinecone（同样修复catch语法，可选）
     if (pinecone && process.env.PINECONE_INDEX_NAME) {
-      await pinecone.Index(process.env.PINECONE_INDEX_NAME)
-        .upsert([{ id: fileName, values: embedding, metadata: { tags: autoTags } }])
-        .catch(err => console.error("Pinecone写入失败：", err));
+      try {
+        const index = pinecone.Index(process.env.PINECONE_INDEX_NAME);
+        await index.upsert([{
+          id: fileName,
+          values: embedding,
+          metadata: { tags: autoTags, file_name: fileName }
+        }]);
+      } catch (pineconeError) {
+        console.error("Pinecone写入失败：", pineconeError.message);
+      }
     }
 
     // 返回成功响应
