@@ -15,8 +15,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let supabase, pinecone, openai;
 try {
   supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   );
   openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
