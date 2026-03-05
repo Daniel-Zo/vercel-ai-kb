@@ -1,4 +1,4 @@
-// pages/api/upload.js - 极简稳定版（无AI依赖）
+// pages/api/upload.js - 适配Supabase数组类型的极简版
 import { createClient } from "@supabase/supabase-js";
 import fs from "fs";
 import path from "path";
@@ -24,9 +24,8 @@ export const config = {
   api: { bodyParser: false }
 };
 
-// 主处理函数（仅处理PDF上传和Supabase写入）
+// 主处理函数
 export default async function handler(req, res) {
-  // 确保所有异常都返回合法JSON
   try {
     if (req.method !== "POST") {
       return res.status(405).json({
@@ -35,14 +34,14 @@ export default async function handler(req, res) {
       });
     }
 
-    // formidable v2 正确实例化
+    // formidable v2 实例化
     const form = new IncomingForm({
       uploadDir: "/tmp",
       keepExtensions: true,
-      maxFileSize: 4 * 1024 * 1024 // 4MB限制
+      maxFileSize: 4 * 1024 * 1024
     });
 
-    // 解析表单数据
+    // 解析表单
     const [fields, files] = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
         if (err) reject(err);
@@ -50,7 +49,7 @@ export default async function handler(req, res) {
       });
     });
 
-    // 检查PDF文件
+    // 检查文件
     const pdfFile = files.file;
     if (!pdfFile) {
       return res.status(400).json({
@@ -59,16 +58,15 @@ export default async function handler(req, res) {
       });
     }
 
-    // 构造文件信息（固定标签为"其他"）
+    // 构造文件信息（数组格式标签）
     const fileName = pdfFile.originalFilename || `file_${Date.now()}.pdf`;
-    const defaultTags = ["其他"]; // 固定标签，无需AI
+    const defaultTags = ["其他"]; // 数组格式，适配text[]字段
 
-    // 替换原Supabase写入代码段
+    // 写入Supabase（适配数组类型）
     if (supabase) {
-      // 正确语法：传入数组（适配text[]类型）
       const { error: supabaseError } = await supabase.from("files").insert({
         file_name: fileName,
-        tags: defaultTags, // 直接传数组["其他"]，而非字符串"其他"
+        tags: defaultTags, // 直接传数组，而非字符串
         text_content: "PDF文件已上传（未提取文本）"
       });
       if (supabaseError) {
@@ -76,7 +74,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // 返回成功响应（无AI，固定标签）
+    // 返回成功响应
     return res.status(200).json({
       success: true,
       auto_tags: defaultTags,
@@ -85,7 +83,6 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    // 捕获所有异常，返回标准JSON
     console.error("上传接口异常：", error);
     return res.status(500).json({
       success: false,
