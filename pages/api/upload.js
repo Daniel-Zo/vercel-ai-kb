@@ -1,115 +1,95 @@
-// pages/api/upload.js 完整修复版
+// pages/api/upload.js - formidable v2 兼容版
 import { createClient } from "@supabase/supabase-js";
 import { Pinecone } from "@pinecone-database/pinecone";
 import { OpenAI } from "openai";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-// 关键修复：formidable正确导入方式（v3+兼容）
-import formidable from "formidable";
+// formidable v2 正确导入方式
+import { IncomingForm } from "formidable";
 
-// 解决ES模块__dirname问题
+// 解决ES模块__dirname
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// 初始化客户端（带异常捕获）
+// 初始化客户端
 let supabase, pinecone, openai;
 try {
-  // Supabase初始化
   supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   );
-
-  // OpenAI初始化
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  // Pinecone初始化
-  pinecone = new Pinecone({
-    apiKey: process.env.PINECONE_API_KEY,
-  });
-} catch (error) {
-  console.error("客户端初始化失败：", error);
+  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  pinecone = new Pinecone({ apiKey: process.env.PINECONE_API_KEY });
+} catch (err) {
+  console.error("客户端初始化失败：", err);
 }
 
-// 禁用Next.js默认的body解析
+// 禁用默认body解析
 export const config = {
-  api: {
-    bodyParser: false,
-  },
+  api: { bodyParser: false }
 };
 
-// 简易PDF文本提取（依赖pdf-parse）
+// 简易PDF提取
 async function extractPdfText(buffer) {
   try {
     const pdfParse = (await import("pdf-parse")).default;
     const data = await pdfParse(buffer);
     return data.text || "";
-  } catch (error) {
-    console.error("PDF文本提取失败：", error);
+  } catch (err) {
+    console.error("PDF提取失败：", err);
     return "";
   }
 }
 
-// AI分类文本（兜底返回"其他"）
+// AI分类（兜底）
 async function aiClassifyText(text) {
   if (!openai || !text) return ["其他"];
-
   try {
-    const completion = await openai.chat.completions.create({
+    const res = await openai.chat.completions.create({
       model: "gpt-3.5-turbo",
-      messages: [
-        {
-          role: "user",
-          content: `请给以下文本分类，仅返回1-3个标签（用逗号分隔），可选标签：金融,医疗,科技,教育,政策,市场,事件,财报,其他。文本：${text.slice(0, 500)}`,
-        },
-      ],
-      temperature: 0.3,
+      messages: [{
+        role: "user",
+        content: `给文本打1-3个标签（仅返回逗号分隔的标签）：金融,医疗,科技,教育,政策,市场,事件,财报,其他。文本：${text.slice(0, 500)}`
+      }],
+      temperature: 0.3
     });
-
-    return completion.choices[0].message.content.split(",").map((tag) => tag.trim());
-  } catch (error) {
-    console.error("AI分类失败：", error);
+    return res.choices[0].message.content.split(",").map(t => t.trim());
+  } catch (err) {
+    console.error("AI分类失败：", err);
     return ["其他"];
   }
 }
 
-// 获取文本向量（兜底返回空向量）
+// 获取向量（兜底）
 async function getTextEmbedding(text) {
   if (!openai || !text) return Array(1536).fill(0);
-
   try {
-    const embedding = await openai.embeddings.create({
+    const res = await openai.embeddings.create({
       model: "text-embedding-ada-002",
-      input: text.slice(0, 500),
+      input: text.slice(0, 500)
     });
-    return embedding.data[0].embedding;
-  } catch (error) {
-    console.error("向量生成失败：", error);
+    return res.data[0].embedding;
+  } catch (err) {
+    console.error("向量生成失败：", err);
     return Array(1536).fill(0);
   }
 }
 
-// 主处理函数（全量异常捕获）
+// 主处理函数
 export default async function handler(req, res) {
-  // 确保始终返回合法JSON
   try {
     if (req.method !== "POST") {
-      return res.status(405).json({
-        success: false,
-        error: "仅支持POST请求",
-      });
+      return res.status(405).json({ success: false, error: "仅支持POST" });
     }
 
-    // 关键修复：formidable v3+正确创建IncomingForm实例
-    const form = formidable({
-      uploadDir: path.join(process.cwd(), "tmp"), // Vercel兼容的临时目录
+    // formidable v2 正确创建实例（new IncomingForm()）
+    const form = new IncomingForm({
+      uploadDir: path.join("/tmp"), // Vercel 原生可写目录
       keepExtensions: true,
-      maxFileSize: 4 * 1024 * 1024, // 4MB限制
+      maxFileSize: 4 * 1024 * 1024 // 4MB限制
     });
 
-    // 解析表单数据（Promise封装）
+    // 解析表单
     const [fields, files] = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
         if (err) reject(err);
@@ -117,65 +97,50 @@ export default async function handler(req, res) {
       });
     });
 
-    // 检查上传的PDF文件
-    const pdfFile = files.file ? files.file[0] : null;
+    // 检查文件
+    const pdfFile = files.file;
     if (!pdfFile) {
-      return res.status(400).json({
-        success: false,
-        error: "请选择PDF文件上传",
-      });
+      return res.status(400).json({ success: false, error: "未选择PDF文件" });
     }
 
-    // 读取文件缓冲区
+    // 读取文件（v2中files.file是对象，不是数组）
     const fileBuffer = await fs.promises.readFile(pdfFile.filepath);
     const fileName = pdfFile.originalFilename || `file_${Date.now()}.pdf`;
 
-    // 核心业务逻辑
-    const textContent = await extractPdfText(fileBuffer);
-    const autoTags = await aiClassifyText(textContent);
-    const embedding = await getTextEmbedding(textContent);
+    // 核心逻辑
+    const text = await extractPdfText(fileBuffer);
+    const autoTags = await aiClassifyText(text);
+    const embedding = await getTextEmbedding(text);
 
-    // 写入Supabase数据库
+    // 写入Supabase
     if (supabase) {
-      try {
-        await supabase.from("files").insert({
-          file_name: fileName,
-          tags: autoTags.join(","), // 适配text类型
-          text_content: textContent.slice(0, 1000),
-        });
-      } catch (error) {
-        console.error("Supabase写入失败：", error);
-      }
+      await supabase.from("files").insert({
+        file_name: fileName,
+        tags: autoTags.join(","),
+        text_content: text.slice(0, 1000)
+      }).catch(err => console.error("Supabase写入失败：", err));
     }
 
-    // 写入Pinecone（可选，失败不影响核心流程）
+    // 写入Pinecone
     if (pinecone && process.env.PINECONE_INDEX_NAME) {
-      try {
-        const index = pinecone.Index(process.env.PINECONE_INDEX_NAME);
-        await index.upsert([
-          {
-            id: fileName,
-            values: embedding,
-            metadata: { tags: autoTags, file_name: fileName },
-          },
-        ]);
-      } catch (error) {
-        console.error("Pinecone写入失败：", error);
-      }
+      await pinecone.Index(process.env.PINECONE_INDEX_NAME)
+        .upsert([{ id: fileName, values: embedding, metadata: { tags: autoTags } }])
+        .catch(err => console.error("Pinecone写入失败：", err));
     }
 
-    // 返回成功响应（标准JSON）
+    // 返回成功响应
     return res.status(200).json({
       success: true,
       auto_tags: autoTags,
-      file_name: fileName,
+      file_name: fileName
     });
+
   } catch (error) {
-    // 捕获所有异常，返回标准JSON
+    // 全量异常捕获
     console.error("上传接口异常：", error);
     return res.status(500).json({
       success: false,
-      error: error.message || "服务器内部错误，上传失败",
+      error: error.message || "上传失败"
     });
   }
 }
